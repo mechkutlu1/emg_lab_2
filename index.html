@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BIO2 &middot; Active Ankle-Foot Orthosis Rehabilitation Bench</title>
+<meta name="description" content="Interactive teaching simulator for the BIO2 active ankle-foot orthosis (AAFO) laboratory: repetitive, admittance-resist and admittance-assist rehabilitation control on a 1-DOF ankle, with a live foot/orthosis animation, gait-cycle reference and instrument traces. Built on M. Mansour's PhD thesis (Sakarya University of Applied Sciences, 2023)." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0d1417;
+    --bg2:#0a0f12;
+    --panel:#131e22;
+    --panel2:#182a2f;
+    --line:#22383e;
+    --line2:#2e4c54;
+    --ink:#e2ecea;
+    --muted:#7d9791;
+    --faint:#5a726d;
+    /* signal palette (scope traces) */
+    --teal:#35e0c6;      /* measured ankle angle    */
+    --amber:#f5b23f;     /* reference / command     */
+    --rose:#ff6d86;      /* interaction force (FSR) */
+    --lime:#a6e86a;      /* tracking error          */
+    --violet:#9b8cff;
+    --red:#ff5257;
+    --shadow:0 10px 40px rgba(0,0,0,.45);
+    --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+    --disp:'Space Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #12262a 0%, transparent 60%),
+      radial-gradient(900px 500px at -5% 110%, #10201c 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:var(--disp);
+    -webkit-font-smoothing:antialiased;
+    line-height:1.45;
+  }
+  a{color:var(--teal)}
+  .wrap{max-width:1500px;margin:0 auto;padding:20px 22px 60px}
+
+  /* ---------- header ---------- */
+  header.top{
+    display:flex;align-items:flex-end;justify-content:space-between;
+    gap:20px;flex-wrap:wrap;
+    border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:18px;
+  }
+  .brand{display:flex;align-items:center;gap:16px}
+  .badge{
+    font-family:var(--mono);font-weight:600;font-size:13px;letter-spacing:.14em;
+    color:var(--bg);background:var(--teal);
+    padding:8px 12px;border-radius:4px;
+    box-shadow:0 0 24px rgba(53,224,198,.35);
+  }
+  .brand h1{
+    font-size:22px;font-weight:600;margin:0;letter-spacing:-.01em;
+  }
+  .brand p{margin:2px 0 0;color:var(--muted);font-size:13px;font-family:var(--mono);letter-spacing:.02em}
+  .status{
+    font-family:var(--mono);font-size:12px;color:var(--muted);
+    display:flex;align-items:center;gap:10px;text-align:right;
+  }
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--red);box-shadow:0 0 10px var(--red)}
+  .dot.run{background:var(--teal);box-shadow:0 0 10px var(--teal);animation:pulse 1.4s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.4}}
+
+  /* ---------- task rail ---------- */
+  .tasks{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+  .task{
+    appearance:none;cursor:pointer;text-align:left;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    color:var(--muted);padding:10px 14px;min-width:160px;
+    font-family:var(--disp);transition:.15s;
+  }
+  .task:hover{border-color:var(--line2);color:var(--ink)}
+  .task.active{
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border-color:var(--teal);color:var(--ink);
+    box-shadow:inset 0 0 0 1px rgba(53,224,198,.25);
+  }
+  .task .k{font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--faint);display:block}
+  .task.active .k{color:var(--teal)}
+  .task .t{font-size:14px;font-weight:500}
+
+  /* ---------- layout ---------- */
+  .grid{display:grid;grid-template-columns:minmax(360px,1fr) minmax(420px,1.15fr);gap:16px}
+  @media (max-width:1040px){.grid{grid-template-columns:1fr}}
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    box-shadow:var(--shadow);overflow:hidden;
+  }
+  .card h2{
+    font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    font-family:var(--mono);font-weight:600;margin:0;
+    padding:12px 16px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+  }
+  .card h2 .side{color:var(--faint);letter-spacing:.06em}
+
+  /* stage */
+  #stageWrap{position:relative;background:
+      linear-gradient(180deg,#0c1418 0%, #0a1013 100%);}
+  canvas{display:block;width:100%}
+  #stage{height:360px}
+  #scope{height:640px}
+  @media (max-width:640px){#scope{height:520px}}
+  /* telemetry chips over stage */
+  .telem{
+    position:absolute;top:12px;left:12px;right:12px;
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;pointer-events:none;
+  }
+  .chip{
+    background:rgba(9,15,17,.72);border:1px solid var(--line);border-radius:7px;
+    padding:7px 9px;backdrop-filter:blur(3px);
+  }
+  .chip .lab{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}
+  .chip .val{font-family:var(--mono);font-size:17px;font-weight:600;color:var(--ink);white-space:nowrap}
+  .chip .val small{font-size:11px;color:var(--muted);font-weight:400}
+
+  /* controls */
+  .controls{padding:14px 16px}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .btn{
+    appearance:none;cursor:pointer;font-family:var(--mono);font-size:13px;font-weight:600;
+    letter-spacing:.03em;padding:9px 14px;border-radius:8px;border:1px solid var(--line2);
+    background:var(--panel2);color:var(--ink);transition:.15s;
+  }
+  .btn:hover{border-color:var(--teal);color:#fff}
+  .btn.primary{background:var(--teal);color:var(--bg);border-color:var(--teal)}
+  .btn.primary:hover{box-shadow:0 0 20px rgba(53,224,198,.4)}
+  .btn.warn{border-color:#4a2a2c;color:#ffb3bb}
+  .btn.warn:hover{border-color:var(--red)}
+  .btn.hold{user-select:none;-webkit-user-select:none;touch-action:none}
+  .btn.hold.on{background:var(--lime);color:#0a1a05;border-color:var(--lime);box-shadow:0 0 20px rgba(166,232,106,.4)}
+
+  .field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+  .field .lbl{
+    display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+    font-size:13px;color:var(--muted);
+  }
+  .field .lbl b{color:var(--ink);font-weight:500}
+  .field .lbl .num{font-family:var(--mono);color:var(--teal);font-size:13px}
+  .field .hint{font-size:11.5px;color:var(--faint);font-family:var(--mono)}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:3px;
+    background:linear-gradient(90deg,var(--line2),var(--line));outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+    background:var(--teal);border:2px solid var(--bg);cursor:pointer;
+    box-shadow:0 0 0 1px var(--teal),0 0 12px rgba(53,224,198,.5);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:16px;height:16px;border-radius:50%;background:var(--teal);
+    border:2px solid var(--bg);cursor:pointer;
+  }
+  input[type=range]:disabled{opacity:.35}
+  .toggle{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:13px;color:var(--muted);margin-bottom:10px}
+  .toggle input{accent-color:var(--teal);width:16px;height:16px}
+  .toggle.on{color:var(--ink)}
+
+  /* exercise phase segmented control */
+  .seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
+  .segbtn{
+    appearance:none;cursor:pointer;font-family:var(--mono);font-size:12.5px;font-weight:600;
+    padding:9px 6px;border-radius:8px;border:1px solid var(--line2);
+    background:var(--panel2);color:var(--muted);transition:.15s;
+  }
+  .segbtn:hover{color:var(--ink);border-color:var(--line2)}
+  .segbtn.active{background:var(--lime);color:#10230a;border-color:var(--lime);box-shadow:0 0 16px rgba(166,232,106,.3)}
+  .meter{margin-bottom:6px}
+  .meter-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .meter-lab{font-size:12.5px;color:var(--muted)}
+  .meter-val{font-family:var(--mono);font-size:13px;color:var(--lime)}
+  .meter-val small{color:var(--faint)}
+  .meter-bar{position:relative;height:8px;border-radius:5px;background:var(--bg2);border:1px solid var(--line);overflow:hidden}
+  .meter-fill{position:absolute;left:0;top:0;bottom:0;width:0%;
+    background:linear-gradient(90deg,#5a8a3a,var(--lime));transition:width .08s linear}
+  .meter-tick{position:absolute;top:-2px;bottom:-2px;width:1px;background:var(--faint);opacity:.6}
+
+  .divider{height:1px;background:var(--line);margin:6px 0 14px}
+  .sub{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:2px 0 10px}
+
+  /* scope */
+  #scopeWrap{background:linear-gradient(180deg,#091012,#070c0e)}
+
+  /* explain + code */
+  .lower{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+  @media (max-width:1040px){.lower{grid-template-columns:1fr}}
+  .prose{padding:16px 18px;font-size:14px;color:#cdd9d6}
+  .prose h3{margin:0 0 8px;font-size:15px;font-weight:600;color:var(--ink)}
+  .prose p{margin:0 0 10px}
+  .prose ul{margin:0 0 10px;padding-left:18px}
+  .prose li{margin:4px 0}
+  .prose .q{
+    border-left:2px solid var(--amber);background:rgba(245,178,63,.06);
+    padding:8px 12px;margin:10px 0;border-radius:0 6px 6px 0;color:#e9d9b6;font-size:13.5px;
+  }
+  .prose .q b{color:var(--amber)}
+  .prose code{font-family:var(--mono);background:var(--bg2);border:1px solid var(--line);padding:1px 5px;border-radius:4px;font-size:12.5px;color:var(--teal)}
+  .prose .eq{font-family:var(--mono);background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:8px 12px;margin:8px 0;font-size:12.5px;color:#bfe6dd;overflow-x:auto}
+  pre.code{
+    margin:0;padding:16px 18px;overflow:auto;background:var(--bg2);
+    font-family:var(--mono);font-size:12.5px;line-height:1.65;color:#c7d4d0;
+  }
+  pre.code .cm{color:var(--faint)}
+  pre.code .kw{color:var(--violet)}
+  pre.code .fn{color:var(--teal)}
+  pre.code .st{color:var(--amber)}
+  pre.code .nm{color:var(--rose)}
+  pre.code .hl{background:rgba(53,224,198,.10);display:block;margin:0 -18px;padding:0 18px}
+
+  footer{margin-top:26px;padding-top:16px;border-top:1px solid var(--line);
+    color:var(--faint);font-family:var(--mono);font-size:11.5px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
+
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:14px;height:3px;border-radius:2px;display:inline-block}
+
+  @media (prefers-reduced-motion:reduce){.dot.run{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <div class="badge">BIO&nbsp;2</div>
+      <div>
+        <h1>Active Ankle-Foot Orthosis Rehabilitation Bench</h1>
+        <p>1-DOF ankle rig &middot; repetitive &amp; admittance control for athlete rehabilitation</p>
+      </div>
+    </div>
+    <div class="status">
+      <span id="statTxt">idle</span>
+      <span id="statDot" class="dot"></span>
+    </div>
+  </header>
+
+  <!-- task rail -->
+  <nav class="tasks" id="taskRail"></nav>
+
+  <div class="grid">
+    <!-- LEFT: stage + controls -->
+    <section class="card">
+      <h2>Bench view <span class="side" id="modeTag">repetitive control</span></h2>
+      <div id="stageWrap">
+        <canvas id="stage" height="360"></canvas>
+        <div class="telem">
+          <div class="chip"><div class="lab">foot &theta;</div><div class="val" id="tTheta">0<small>&deg;</small></div></div>
+          <div class="chip"><div class="lab">reference</div><div class="val" id="tCmd">0<small>&deg;</small></div></div>
+          <div class="chip"><div class="lab">FSR force <span style="color:var(--rose)">F</span></div><div class="val" id="tForce">0<small> N</small></div></div>
+          <div class="chip"><div class="lab">error</div><div class="val" id="tErr">0<small>&deg;</small></div></div>
+          <div class="chip"><div class="lab">motor T</div><div class="val" id="tTm">0<small> Nm</small></div></div>
+          <div class="chip"><div class="lab">EMG <span style="color:var(--lime)">RMS</span></div><div class="val" id="tEmg">0<small> cnt</small></div></div>
+          <div class="chip"><div class="lab">phase</div><div class="val" id="tPhase" style="font-size:13px">stance</div></div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="row">
+          <button class="btn primary" id="runBtn">Run</button>
+          <button class="btn" id="resetBtn">Reset</button>
+          <button class="btn hold" id="pushBtn">Hold to push foot</button>
+        </div>
+
+        <div class="sub">Patient interaction</div>
+        <div class="field">
+          <div class="lbl"><b>Voluntary effort</b><span class="num" id="effortNum">0%</span></div>
+          <input type="range" id="effort" min="0" max="100" value="0" />
+          <div class="hint">patient torque at the foot platform (disturbance torque T&#x1D05;)</div>
+        </div>
+        <div class="field">
+          <div class="lbl"><b>Effort direction</b><span class="num" id="dirNum">plantarflex</span></div>
+          <input type="range" id="dir" min="-1" max="1" step="2" value="-1" />
+          <div class="hint">which way the patient pushes: dorsiflex (up) / plantarflex (down)</div>
+        </div>
+        <label class="toggle" id="assistTog"><input type="checkbox" id="assist" checked/> Orthosis motor ON</label>
+
+        <div class="divider"></div>
+        <div class="sub">Attentional focus <span style="color:var(--faint)">(same torque, different EMG)</span></div>
+        <div class="seg" id="focusSeg">
+          <button class="segbtn" data-focus="external">External</button>
+          <button class="segbtn active" data-focus="control">Control</button>
+          <button class="segbtn" data-focus="internal">Internal</button>
+        </div>
+        <div class="hint" id="focusHint" style="margin:-4px 0 12px">no instruction given &middot; baseline EMG</div>
+        <div class="meter">
+          <div class="meter-row">
+            <span class="meter-lab">EMG activity (RMS)</span>
+            <span class="meter-val" id="rmsVal">0 <small>cnt</small></span>
+          </div>
+          <div class="meter-bar"><div class="meter-fill" id="rmsFill"></div>
+            <div class="meter-tick" style="left:38%"></div>
+            <div class="meter-tick" style="left:55%"></div>
+          </div>
+          <div class="hint" id="rmsQual">push the foot to see the signal the orthosis reads</div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="sub">Gait cadence <span style="color:var(--faint)">(passive mode)</span></div>
+        <div class="field">
+          <div class="lbl"><b>Cycle period</b><span class="num" id="periodNum">2.0 s</span></div>
+          <input type="range" id="period" min="1.2" max="3.5" step="0.1" value="2.0" />
+          <div class="hint">a comfortable human gait cycle is ~2 s (thesis reference)</div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="sub" id="paramTitle">Controller parameters</div>
+        <div id="paramBox"></div>
+      </div>
+    </section>
+
+    <!-- RIGHT: scope -->
+    <section class="card">
+      <h2>Instrument traces <span class="side">10&nbsp;s window</span></h2>
+      <div id="scopeWrap"><canvas id="scope" height="560"></canvas></div>
+      <div class="controls" style="padding-top:12px">
+        <div class="legend">
+          <span><i style="background:var(--teal)"></i>foot angle &theta; (&deg;)</span>
+          <span><i style="background:var(--amber)"></i>reference r / platform (&deg;)</span>
+          <span><i style="background:var(--rose)"></i>strap load F (FSR, N)</span>
+          <span><i style="background:var(--lime)"></i>EMG raw (cnt)</span>
+          <span><i style="background:var(--violet)"></i>tracking error e (&deg;)</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- lower: explanation + code -->
+  <div class="lower">
+    <section class="card"><div class="prose" id="prose"></div></section>
+    <section class="card">
+      <h2>Arduino sketch <span class="side" id="codeTag">passive.ino</span></h2>
+      <pre class="code" id="code"></pre>
+    </section>
+  </div>
+
+  <footer>
+    <span>Model: TWO-BODY ankle orthosis &mdash; platform (JP&theta;&#776;<sub>P</sub> + DP&theta;&#775;<sub>P</sub> = T &minus; T<sub>strap</sub>) coupled to foot (JF&theta;&#776;<sub>F</sub> + DF&theta;&#775;<sub>F</sub> + G + T<sub>pat</sub> = T<sub>strap</sub>) via stiff strap T<sub>strap</sub> = k<sub>c</sub>(&theta;<sub>P</sub>&minus;&theta;<sub>F</sub>). FSR reads T<sub>strap</sub>/arm. RK4, outer dt&nbsp;=&nbsp;5&nbsp;ms, inner sub-step 1&nbsp;ms. ROM: dorsi 0&ndash;30&deg;, plantar 0&ndash;&minus;45&deg;.</span>
+    <span>Teaching aid for BIO2 &middot; after M. Mansour, PhD, SUB&Uuml; 2023 &middot; runs client-side</span>
+  </footer>
+</div>
+
+<script>
+"use strict";
+/* =========================================================================
+   BIO2 Active Ankle-Foot Orthosis (AAFO) Rehabilitation Bench
+   Single-file teaching simulator.
+
+   Built on: Mohammed Mansour, "Development and Control of Lower Limb Active
+   Orthosis for Athlete Rehabilitation", PhD thesis, Sakarya University of
+   Applied Sciences, Dec 2023 (Supervisor: M. C. Kutlu).
+
+   Physical model (ankle, 1-DOF sagittal plane -- dorsi/plantarflexion)
+   -------------------------------------------------------------------
+   TWO-BODY MODEL. The foot is strapped to the orthosis platform, so they
+   are two coupled rigid bodies -- exactly the arm/cuff coupling used in the
+   elbow rig (kc*(thetaServo - theta)). The motor drives only the PLATFORM;
+   the foot is tied to it through a stiff strap, and the FSR reads that
+   strap load.
+
+   State (4-D):  thetaP, omegaP  -- orthosis platform (motor side)
+                 thetaF, omegaF  -- foot            (patient side)
+
+   Platform :  JP*omegaP_dot = T_motor - DP*omegaP - T_strap
+   Foot     :  JF*omegaF_dot = T_strap  - DF*omegaF - G + T_patient
+   Strap    :  T_strap = kc * (thetaP - thetaF)        [Nm]
+   FSR      :  F_fsr   = T_strap / FSR_ARM             [N]
+   Gravity  :  G = MF*g*RcF*cos(thetaF)                (Eq. 4.25)
+
+   When the motor holds the platform still, the strap is the only thing
+   driving the foot -> any patient push stretches the strap, the FSR reads
+   that load, and the foot's motion is constrained. With the motor OFF the
+   platform is backdrivable, so the strap drags the platform along with
+   the foot (with a small lag set by kc) instead of resisting it.
+
+   theta convention:  0 = neutral foot flat,  + = dorsiflexion (toes up),
+                      - = plantarflexion (toes down).
+   ROM end-stops:  +30 deg dorsiflexion, -45 deg plantarflexion (Fig 4.19).
+   Simulation/experiment limits used in the thesis: +29 / -30 deg.
+
+   Three rehabilitation exercises (Chapter 4-5):
+     - PASSIVE   : repetitive control, tracks the 2 s gait-cycle reference
+                   (patient exerts no effort). First use of RC in an AAFO.
+     - ISOMETRIC : admittance RESIST mode  (M=1, B=0.8, K=1)
+     - ISOTONIC  : admittance ASSIST mode  (M=0.2, B=0.8, K=1)
+   Admittance follows the mass-spring-damper virtual model (Eq. 4.27-4.33):
+     F - K*x - B*xdot = M*xddot   ->   the force yields a position command.
+
+   Hardware mirrored in the listings: Arduino Uno (PWM), 24 V DC servo motor,
+   360 deg rotary encoder, FSR under the foot (thesis Fig 5.1), surface EMG
+   electrodes on the ankle muscles (tibialis anterior / gastrocnemius).
+
+   Attentional focus (Ay 2021, PhD, Sakarya):
+     Internal focus  (attend to the muscle)   -> EMG gain 1.17  (higher signal)
+     Control         (no instruction)         -> EMG gain 1.00  (baseline)
+     External focus  (attend to the platform) -> EMG gain 0.82  (lower signal)
+   Physical patient torque is unchanged; only the EMG signal scales. This is
+   the constrained-action hypothesis: external focus frees automatic control
+   and spends less muscle activity for the same movement.
+   ========================================================================= */
+
+const P = {
+  // ---- foot (patient side) ----
+  MF: 1.05,                 // mass of the foot                    [kg]
+  RcF: 0.14,                // foot lever length (ankle -> toe)   [m]
+  DF: 0.55,                 // foot viscous drag                   [Nm s/rad]
+  // ---- orthosis platform (motor side) ----
+  MP: 0.45,                 // platform + strut mass-equivalent   [kg]
+  RcP: 0.14,                // platform lever length               [m]
+  DP: 0.18,                 // platform viscous drag (low)         [Nm s/rad]
+  // ---- strap coupling (foot <-> platform) ----
+  // The foot is strapped firmly to the platform -- a real AFO cuff is
+  // essentially rigid (velcro + rigid side walls). The strap transmits torque
+  // between the two bodies; its load IS what the FSR under the foot actually
+  // measures (not the patient's own torque, as the merged model did).
+  // kc is set high enough that under a full 7.5 Nm patient push the angular
+  // slip stays under ~1 degree, so the foot is genuinely CONSTRAINED by the
+  // platform rather than sliding inside the orthosis.
+  kc: 600.0,                // strap stiffness                    [Nm/rad]
+  // ---- environment ----
+  g: 9.81,
+  // ---- motor / actuator ----
+  MOTOR_MAX: 12.0,          // peak motor torque                  [Nm]
+  KP_INNER: 34.0,           // inner position-loop gain (encoder) [Nm/rad]
+  KD_INNER: 1.6,            // inner position-loop damping
+  PATIENT_MAX: 7.5,         // peak voluntary foot torque         [Nm]
+  FSR_ARM: 0.11,            // lever converting strap torque -> FSR force [m]
+  // ---- EMG (surface electrodes on the ankle muscles) ----
+  EMG_GAIN: 660,            // ADC counts at full muscle activation
+  EMG_BASE: 28,             // resting baseline (ADC counts)
+  // ---- ROM end-stops (anatomical, applied to BOTH bodies) ----
+  DORSI_MAX: 30,            // + ROM limit  [deg]
+  PLANTAR_MAX: -45,         // - ROM limit  [deg]
+  DORSI_LIM: 29,            // thesis assist/resist dorsi limit
+  PLANTAR_LIM: -30,         // thesis assist/resist plantar limit
+};
+P.JF = P.MF * P.RcF * P.RcF;  // foot inertia     about the ankle shaft [kg m^2]
+P.JP = P.MP * P.RcP * P.RcP;  // platform inertia about the ankle shaft [kg m^2]
+
+const dt       = 0.005;     // outer physics step [s] (matches Arduino control period)
+const dtPhys   = 0.00025;   // inner sub-step [s] -- the strap is very stiff
+                            // (omega = sqrt(kc*(1/JF+1/JP)) ~ 800 rad/s at kc=600),
+                            // so we sub-step the RK4 integration at 0.25 ms to
+                            // keep omega*dt < 0.2 (RK4 stable, no energy leak)
+
+// ---------- attentional focus ----------
+// Attentional focus modulates how much EMG the ankle muscles emit for the SAME
+// torque (Ay 2021, PhD, Sakarya: internal focus raises EMG activity, external
+// focus lowers it via the constrained-action hypothesis). Physical effort and
+// patient torque are unchanged; only the electrical signal the orthosis reads
+// changes. Factors are set so internal sits a little above control and external
+// ~15-20% below, matching the thesis RMS/MAV/IEMG findings.
+const FOCUS = {
+  external: { gain: 0.82, name: 'External', hint: 'attend to the foot / the platform' },
+  control:  { gain: 1.00, name: 'Control',  hint: 'no instruction given' },
+  internal: { gain: 1.17, name: 'Internal', hint: 'attend to the ankle muscles themselves' },
+};
+
+// ---------- simulation state ----------
+const S = {
+  // ---- two-body state: platform (motor side) + foot (patient side) ----
+  thetaP: 0, omegaP: 0,     // orthosis platform angle [rad], angular velocity
+  thetaF: 0, omegaF: 0,     // foot angle            [rad], angular velocity
+  Tstrap: 0,                // strap torque (coupling force * arm)  [Nm]
+  ref: 0,                   // current reference angle [deg] (platform target)
+  posDes: 0,                // admittance "positionDesired" register [deg]
+  gaitT: 0,                 // phase clock for the gait reference [s]
+  effort: 0,                // slider 0..1  (voluntary torque fraction)
+  dir: -1,                  // +1 dorsiflex, -1 plantarflex
+  pushing: false,
+  patientT: 0,              // actual patient torque applied to the foot [Nm]
+  assist: true,
+  running: false,
+  t: 0,
+  err: 0,                   // tracking error [deg]  (ref - thetaP)
+  errRms: 0,                // rolling RMS of |error| (thesis metric)
+  // ---- attentional focus + EMG ----
+  focus: 'control',         // attentional focus condition
+  emgRaw: 0,                // raw EMG ADC reading (0..1023)
+  emgRms: 0,                // rolling RMS of EMG activity above baseline
+  // outputs for telem/plot
+  Fsr: 0, motorT: 0, phaseName: 'stance',
+};
+
+// ---------- controller parameters (per exercise) ----------
+const C = {
+  // admittance virtual model (thesis defaults per mode)
+  admM: 1.0, admB: 0.8, admK: 1.0,
+  forceDesired: 0,          // target interaction force [N]
+  // repetitive control
+  rcGain: 0.9,              // learning gain L
+  rcQ: 0.97,                // robustness filter Q (0..1)
+  // shared
+  ctrlDelay: 0.02,          // control period [s]  (Arduino loop delay)
+};
+
+/* =======================  GAIT REFERENCE  =======================
+   A smooth 1-cycle ankle-angle profile (dorsi +, plantar -) approximating
+   the sagittal ankle trajectory over one gait cycle (thesis Fig 4.29/5.3,
+   after Helwig & Hsiao-Wecksler 2022). p in [0,1] = fraction of the cycle.
+   Stance 0-60%, swing 60-100%. Values in degrees. */
+function gaitRef(p){
+  p = ((p % 1) + 1) % 1;
+  // piecewise-smooth landmarks of a healthy ankle gait cycle
+  // heel strike ~ slight plantar, loading dorsiflex, push-off strong plantar,
+  // swing recovers to neutral/slight dorsi for foot clearance.
+  const pts = [
+    [0.00,  0], [0.06, -4], [0.18,  2], [0.45, 12],
+    [0.60, -6], [0.62,-16], [0.68, -8], [0.80,  3],
+    [0.92,  1], [1.00,  0],
+  ];
+  for(let i=0;i<pts.length-1;i++){
+    const [x0,y0]=pts[i], [x1,y1]=pts[i+1];
+    if(p>=x0 && p<=x1){
+      const u=(p-x0)/(x1-x0);
+      const s=u*u*(3-2*u);            // smoothstep
+      return y0+(y1-y0)*s;
+    }
+  }
+  return 0;
+}
+function gaitPhase(p){
+  p=((p%1)+1)%1;
+  if(p<0.10) return 'heel strike';
+  if(p<0.30) return 'loading';
+  if(p<0.50) return 'mid-stance';
+  if(p<0.60) return 'terminal stance';
+  if(p<0.73) return 'push-off';
+  if(p<0.87) return 'mid-swing';
+  return 'terminal swing';
+}
+
+/* =======================  DYNAMICS (TWO-BODY)  =======================
+   The orthosis is a true two-body system, mirroring the arm/cuff coupling of
+   the elbow rig:
+     - Platform (thetaP): driven by the motor; feels the strap reaction.
+     - Foot     (thetaF): driven by the patient + strap torque + gravity.
+     - Strap:   stiff torsion spring  T_strap = kc*(thetaP - thetaF)
+                + small viscous damping bd*(omegaP - omegaF) to kill the
+                high-frequency ringing that a very stiff spring would
+                otherwise sustain. Its load is what the FSR under the foot
+                actually measures.
+
+   Platform :  JP*omegaP_dot = T_motor - DP*omegaP - T_strap
+   Foot     :  JF*omegaF_dot = T_strap  - DF*omegaF - G + T_patient
+   where     G  = MF*g*RcF*cos(thetaF)   (gravity torque on the foot)
+             T_strap = kc*(thetaP-thetaF) + bd*(omegaP-omegaF)
+
+   When the motor holds the platform still, the strap is the only thing
+   driving the foot. If the patient pushes, the strap stretches (a tiny
+   amount, since kc is large) until its torque balances the patient's effort
+   -> motion is constrained, exactly as a tightened AFO cuff should behave.
+   With the motor OFF the platform is backdrivable, so the strap drags the
+   platform along with the foot instead of resisting it. */
+const BD_STRAP = 0.04;     // strap internal viscous damping [Nm s/rad]
+function deriv(s, Tmotor, Tpat){
+  const [thP, omP, thF, omF] = s;
+  const dth  = thP - thF;                          // angular stretch of strap
+  const dom  = omP - omF;                          // relative angular velocity
+  const Tstr = P.kc*dth + BD_STRAP*dom;            // strap torque on foot (+),
+                                                   // reaction (-) on platform
+  const G    = P.MF*P.g*P.RcF*Math.cos(thF);       // gravity torque on the foot
+  const omPdot = (Tmotor - P.DP*omP - Tstr) / P.JP;
+  const omFdot = (Tstr  - P.DF*omF - G + Tpat) / P.JF;
+  return [omP, omPdot, omF, omFdot];
+}
+function rk4(s, Tmotor, Tpat, h){
+  const k1=deriv(s,Tmotor,Tpat);
+  const s2=s.map((v,i)=>v+0.5*h*k1[i]);
+  const k2=deriv(s2,Tmotor,Tpat);
+  const s3=s.map((v,i)=>v+0.5*h*k2[i]);
+  const k3=deriv(s3,Tmotor,Tpat);
+  const s4=s.map((v,i)=>v+h*k3[i]);
+  const k4=deriv(s4,Tmotor,Tpat);
+  return s.map((v,i)=>v+(h/6)*(k1[i]+2*k2[i]+2*k3[i]+k4[i]));
+}
+const rad=d=>d*Math.PI/180, deg=r=>r*180/Math.PI;
+const clamp=(x,a,b)=>x<a?a:x>b?b:x;
+
+/* =======================  REPETITIVE CONTROL MEMORY  =======================
+   u(i+N) = Q ( u(i) + L*e(i) )   (thesis Eq. 4.39). One period of feed-forward
+   command is stored and refined every cycle. Here u is a corrective angle
+   offset added to the raw gait reference. */
+let RC_N = 0;               // samples per gait period
+let rcMem = null;           // learned per-sample correction (deg)
+let rcIdx = 0;
+function rcReset(){
+  RC_N = Math.max(8, Math.round((S.gaitPeriod||2.0)/C.ctrlDelay));
+  rcMem = new Float32Array(RC_N);   // starts at zero -> pure feed-forward off
+  rcIdx = 0;
+}
+
+/* =======================  CONTROL  =======================
+   Runs once every C.ctrlDelay s, mirroring the Arduino loop().
+
+   Cascade architecture: this outer loop computes the reference trajectory
+   (repetitive-control correction or admittance output). The inner PD loop
+   that turns (ref, thetaP) into motor torque runs much faster, inside the
+   physics sub-step -- the strap raises the platform's natural frequency
+   enough that a 20 ms PD loop would be marginal, so the inner loop runs at
+   the 1 ms physics rate (just like a real servo drive's inner current/torque
+   loop).
+
+   KEY CHANGE: the inner loop now drives the ORTHOSIS PLATFORM (thetaP),
+   not the foot. The motor cannot directly touch the foot -- it can only move
+   the platform, and the strap drags the foot along. The FSR under the foot
+   reads the strap load (T_strap / arm), which is the genuine interaction
+   force between device and patient -- not the patient's own torque, which
+   was the merged-body artefact. */
+let ctrlAcc = 0;
+function control(){
+  // --- read "sensors" from the current physical state ---
+  // The strap is the only mechanical link between platform and foot. Its load
+  // IS the interaction force the FSR reports. (Includes the small strap
+  // damping term so the FSR reading matches the torque the strap actually
+  // transmits at that instant.)
+  S.Tstrap = P.kc*(S.thetaP - S.thetaF) + BD_STRAP*(S.omegaP - S.omegaF);
+  S.Fsr    = S.Tstrap / P.FSR_ARM;
+
+  // --- EMG: surface electrodes on the ankle muscles (tibialis anterior for
+  // dorsiflexion, gastrocnemius/soleus for plantarflexion). The activation
+  // level is derived from the patient's voluntary torque. Attentional focus
+  // scales the EMG the muscle emits for the SAME contraction -- physical
+  // torque (patientT) is unchanged; only the electrical signal changes.
+  const act = Math.min(1, Math.abs(S.patientT) / P.PATIENT_MAX);  // 0..1
+  const fg  = FOCUS[S.focus].gain;
+  S.emgRaw = clamp(Math.round(P.EMG_BASE + act*P.EMG_GAIN*fg + (Math.random()*2-1)*38), 0, 1023);
+  const emgAC = Math.max(0, S.emgRaw - P.EMG_BASE);
+  S.emgRms += (emgAC - S.emgRms)*0.10;  // rolling RMS (thesis metric)
+
+  if(!S.assist){                     // motor OFF -> platform is free/backdrivable
+    S.motorT = 0;
+    S.ref    = deg(S.thetaP);        // ref tracks wherever the platform drifts to
+    S.err    = 0;
+    return;
+  }
+
+  // set reference by exercise
+  switch(MODE){
+    case 'passive': {          // ---- repetitive control on the gait cycle ----
+      if(!rcMem || RC_N !== Math.round((S.gaitPeriod)/C.ctrlDelay)) rcReset();
+      const p = S.gaitT / S.gaitPeriod;
+      const base = gaitRef(p);
+      S.phaseName = gaitPhase(p);
+      // repetitive update (Eq. 4.39): learn from the PLATFORM-OUTPUT error
+      // (the gap between the raw gait reference and the measured platform
+      // angle). The motor can only command the platform; the foot follows
+      // through the strap.
+      const eOut = base - deg(S.thetaP);
+      rcMem[rcIdx] = C.rcQ*(rcMem[rcIdx] + C.rcGain*eOut);
+      S.ref = base + rcMem[rcIdx];
+      rcIdx = (rcIdx+1) % RC_N;
+      break;
+    }
+    case 'isometric': {        // ---- admittance RESIST mode ----
+      // The FSR now reads the genuine strap load, so the admittance law responds
+      // to the force the device is actually applying to the foot -- not just the
+      // patient's own torque. Heavy virtual mass -> platform barely yields.
+      admittanceStep(P.PLANTAR_LIM, P.DORSI_LIM);
+      S.ref = S.posDes;
+      S.phaseName = 'isometric hold';
+      break;
+    }
+    case 'isotonic': {         // ---- admittance ASSIST mode ----
+      // Light virtual mass -> platform moves easily with the strap load, giving
+      // a near-constant-torque assisted range-of-motion sweep.
+      admittanceStep(P.PLANTAR_LIM, P.DORSI_LIM);
+      S.ref = S.posDes;
+      S.phaseName = 'isotonic sweep';
+      break;
+    }
+  }
+
+  S.err = S.ref - deg(S.thetaP);   // tracking error on the PLATFORM angle
+  const eAbs = Math.abs(S.err);
+  S.errRms += (eAbs - S.errRms)*0.08;
+  // NOTE: motorT is computed in the fast inner loop (see step()), not here.
+}
+
+// Inner PD loop: runs at the physics rate (dtPhys). The strap raises the
+// platform's effective natural frequency to sqrt((KP+kc)/JP), which a 20 ms
+// loop cannot stabilize. Running the PD here at 1 ms keeps the closed loop
+// well-damped while the outer reference generator still ticks at ctrlDelay.
+function innerPD(){
+  if(!S.assist){ S.motorT = 0; return; }
+  const eRad = rad(S.ref) - S.thetaP;
+  S.motorT = clamp(P.KP_INNER*eRad - P.KD_INNER*S.omegaP, -P.MOTOR_MAX, P.MOTOR_MAX);
+}
+
+// admittance virtual dynamics: F - K*x - B*xdot = M*xddot  (Eq. 4.27)
+// integrated each control tick; x is the commanded PLATFORM angle in degrees.
+//
+// SIGN CONVENTION: the FSR reads the strap load on the FOOT. The
+// "interaction force" in the admittance law is the force the patient applies
+// to the device -- by Newton's third law that is the negative of what the
+// strap does to the foot. So we feed -Fsr into the virtual mass-spring-damper.
+//
+// TARE: at rest, gravity pulls the foot plantarflex and the strap already
+// carries that load (Fsr = G/arm at neutral). The admittance should only
+// respond to the PATIENT's force, so we subtract the gravity bias G(thetaF)
+// before feeding the FSR into the virtual model. Without this tare the
+// platform would drift plantarflex under the foot's own weight.
+let admVel = 0;
+function admittanceStep(loDeg, hiDeg){
+  const G        = P.MF*P.g*P.RcF*Math.cos(S.thetaF);   // gravity torque on foot
+  const FsrTared = S.Fsr - G/P.FSR_ARM;                  // strap load minus foot weight
+  const F = -FsrTared - C.forceDesired;                  // patient-applied force (N)
+  // xddot = (F - K*x_dev - B*xdot)/M   where x_dev is deviation from rest
+  const xdd = (F - C.admK*S.posDes*0.15 - C.admB*admVel) / Math.max(0.05,C.admM);
+  admVel += xdd * C.ctrlDelay;
+  S.posDes += admVel * C.ctrlDelay * 12;     // scale to a usable angle range
+  S.posDes = clamp(S.posDes, loDeg, hiDeg);
+}
+
+/* =======================  STEP  ======================= */
+function step(realDt){
+  // patient voluntary torque applied to the FOOT: slider + hold-to-push.
+  // (Sign convention: T_patient>0 = dorsiflex push, T_patient<0 = plantarflex
+  // push -- the foot accelerates in the direction the patient pushes.)
+  let mag = S.effort;
+  if(S.pushing) mag = 1;
+  const targetT = mag * P.PATIENT_MAX * S.dir;
+  // muscle torque has build-up/relax dynamics (~120 ms)
+  S.patientT += (targetT - S.patientT)*Math.min(1, realDt/0.12);
+
+  // advance the gait clock only in passive mode
+  if(MODE==='passive' && S.running){ S.gaitT += realDt; }
+
+  // integrate the two-body system + run control at its own rate.
+  // The strap is stiff, so the inner physics is sub-stepped at dtPhys for
+  // numerical stability (RK4 stays accurate while omega_strap*dtPhys << 1).
+  let acc = realDt;
+  while(acc > 1e-9){
+    const h = Math.min(dt, acc);
+    ctrlAcc += h;
+    if(ctrlAcc >= C.ctrlDelay){ ctrlAcc = 0; control(); }
+
+    const subSteps = Math.max(1, Math.ceil(h / dtPhys));
+    const subH = h / subSteps;
+    for(let i=0; i<subSteps; i++){
+      innerPD();  // fast inner PD loop: update motor torque at the physics rate
+      const s = rk4([S.thetaP,S.omegaP,S.thetaF,S.omegaF], S.motorT, S.patientT, subH);
+      S.thetaP=s[0]; S.omegaP=s[1];
+      S.thetaF=s[2]; S.omegaF=s[3];
+      // anatomical / mechanical end-stops (Fig 4.19) -- applied to BOTH bodies
+      const lo=rad(P.PLANTAR_MAX), hi=rad(P.DORSI_MAX);
+      if(S.thetaF<lo){ S.thetaF=lo; if(S.omegaF<0) S.omegaF=0; }
+      if(S.thetaF>hi){ S.thetaF=hi; if(S.omegaF>0) S.omegaF=0; }
+      if(S.thetaP<lo){ S.thetaP=lo; if(S.omegaP<0) S.omegaP=0; }
+      if(S.thetaP>hi){ S.thetaP=hi; if(S.omegaP>0) S.omegaP=0; }
+    }
+    S.t += h;
+    acc -= h;
+  }
+  // refresh strap load + FSR for telemetry / scope at the end of the step
+  S.Tstrap = P.kc*(S.thetaP - S.thetaF) + BD_STRAP*(S.omegaP - S.omegaF);
+  S.Fsr    = S.Tstrap / P.FSR_ARM;
+}
+
+/* =======================  SCOPE  ======================= */
+class Scope{
+  constructor(canvas){
+    this.cv=canvas; this.ctx=canvas.getContext('2d');
+    this.win=10;
+    this.tracks=[
+      {key:'theta', col:getCSS('--teal'), lo:-45, hi:30, label:'foot angle \u03B8', unit:'deg', zero:true, extra:'ref', extraPlat:true},
+      {key:'ref',   col:getCSS('--amber'),lo:-45, hi:30, label:'reference r', unit:'deg', zero:true},
+      {key:'force', col:getCSS('--rose'), lo:-70, hi:70, label:'strap load F (FSR)', unit:'N', zero:true},
+      {key:'emg',   col:getCSS('--lime'), lo:0, hi:1023, label:'EMG raw', unit:'cnt', focusTag:true},
+      {key:'err',   col:getCSS('--violet'), lo:-20, hi:20, label:'tracking error e', unit:'deg', zero:true},
+    ];
+    this.buf=[]; this.maxN=Math.ceil(this.win/0.016)+40;
+  }
+  push(sample){ this.buf.push(sample); if(this.buf.length>this.maxN) this.buf.shift(); }
+  resize(){
+    const dpr=window.devicePixelRatio||1;
+    const w=this.cv.clientWidth;
+    this.cv.width=w*dpr; this.cv.height=this.cv.clientHeight*dpr;
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.W=w; this.H=this.cv.clientHeight;
+  }
+  draw(now){
+    const ctx=this.ctx, W=this.W, H=this.H;
+    ctx.clearRect(0,0,W,H);
+    const n=this.tracks.length;
+    const padL=54, padR=14, padT=10, padB=8, gap=10;
+    const th=(H-padT-padB-(n-1)*gap)/n;
+    const t1=now, t0=now-this.win;
+    this.tracks.forEach((tr,i)=>{
+      const y0=padT+i*(th+gap), y1=y0+th;
+      ctx.fillStyle='rgba(255,255,255,0.012)';
+      ctx.fillRect(padL,y0,W-padL-padR,th);
+      ctx.strokeStyle='rgba(120,160,155,0.10)'; ctx.lineWidth=1;
+      ctx.beginPath();
+      for(let g=0;g<=4;g++){ const y=y0+th*g/4; ctx.moveTo(padL,y); ctx.lineTo(W-padR,y); }
+      for(let g=0;g<=10;g++){ const x=padL+(W-padL-padR)*g/10; ctx.moveTo(x,y0); ctx.lineTo(x,y1);}
+      ctx.stroke();
+      if(tr.zero){
+        const yz=mapY(0,tr.lo,tr.hi,y0,y1);
+        ctx.strokeStyle='rgba(200,220,215,0.22)';ctx.setLineDash([4,4]);
+        ctx.beginPath();ctx.moveTo(padL,yz);ctx.lineTo(W-padR,yz);ctx.stroke();ctx.setLineDash([]);
+      }
+      ctx.fillStyle=getCSS('--faint'); ctx.font='10px '+getCSS('--mono');
+      ctx.textAlign='right'; ctx.textBaseline='middle';
+      ctx.fillText(fmt(tr.hi), padL-6, y0+6);
+      ctx.fillText(fmt(tr.lo), padL-6, y1-6);
+      ctx.textAlign='left';
+      ctx.fillStyle=tr.col; ctx.font='600 11px '+getCSS('--mono');
+      ctx.fillText(tr.label, padL+8, y0+12);
+
+      const X=x=>mapX(x,t0,t1,padL,W-padR);
+      const Y=v=>mapY(clamp(v,tr.lo,tr.hi),tr.lo,tr.hi,y0,y1);
+
+      if(tr.extra){ drawLine(ctx,this.buf,'ref',X,Y,getCSS('--amber'),1.2,0.55,t0); }
+      if(tr.extraPlat){ drawLine(ctx,this.buf,'plat',X,Y,getCSS('--violet'),1.0,0.45,t0); }
+      drawLine(ctx,this.buf,tr.key,X,Y,tr.col,1.8,1,t0);
+
+      // ROM guide lines on the angle tracks
+      if(tr.key==='theta' || tr.key==='ref'){
+        guide(ctx,padL,W-padR,Y(P.DORSI_LIM),getCSS('--faint'));
+        guide(ctx,padL,W-padR,Y(P.PLANTAR_LIM),getCSS('--faint'));
+      }
+      if(tr.key==='force' && (MODE==='isometric'||MODE==='isotonic')){
+        guide(ctx,padL,W-padR,Y(C.forceDesired),getCSS('--amber'));
+      }
+      // current attentional-focus condition tag on the EMG track
+      if(tr.focusTag){
+        ctx.fillStyle=getCSS('--lime');ctx.font='600 10px '+getCSS('--mono');ctx.textAlign='right';
+        ctx.fillText(FOCUS[S.focus].name.toLowerCase()+' focus', W-padR-4, y1-6);
+      }
+      const last=this.buf[this.buf.length-1];
+      if(last){
+        ctx.fillStyle=tr.col;ctx.font='600 13px '+getCSS('--mono');
+        ctx.textAlign='right';
+        ctx.fillText(fmt(last[tr.key])+' '+tr.unit, W-padR-4, y0+12);
+      }
+    });
+  }
+}
+function drawLine(ctx,buf,key,X,Y,col,w,alpha,t0){
+  ctx.strokeStyle=col;ctx.globalAlpha=alpha;ctx.lineWidth=w;
+  ctx.lineJoin='round';ctx.beginPath();let started=false;
+  for(const p of buf){
+    if(p.t<t0-0.1) continue;
+    const x=X(p.t),y=Y(p[key]);
+    if(!started){ctx.moveTo(x,y);started=true;} else ctx.lineTo(x,y);
+  }
+  ctx.stroke();ctx.globalAlpha=1;
+}
+function guide(ctx,x0,x1,y,col){
+  ctx.strokeStyle=col;ctx.globalAlpha=.5;ctx.setLineDash([3,4]);ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(x0,y);ctx.lineTo(x1,y);ctx.stroke();
+  ctx.setLineDash([]);ctx.globalAlpha=1;
+}
+const mapX=(v,a,b,c,d)=>c+(d-c)*(v-a)/(b-a);
+const mapY=(v,a,b,c,d)=>d+(c-d)*(v-a)/(b-a);
+function fmt(v){ return Math.abs(v)>=100?v.toFixed(0):v.toFixed(1); }
+function getCSS(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+/* =======================  STAGE (foot + orthosis)  ======================= */
+const stage=document.getElementById('stage');
+const sx=stage.getContext('2d');
+if(!CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+    if(typeof r==='number') r={tl:r,tr:r,br:r,bl:r}; else r=Object.assign({tl:0,tr:0,br:0,bl:0},r);
+    this.beginPath();this.moveTo(x+r.tl,y);
+    this.arcTo(x+w,y,x+w,y+h,r.tr);this.arcTo(x+w,y+h,x,y+h,r.br);
+    this.arcTo(x,y+h,x,y,r.bl);this.arcTo(x,y,x+w,y,r.tl);this.closePath();return this;
+  };
+}
+function resizeStage(){
+  const dpr=window.devicePixelRatio||1;
+  const w=stage.clientWidth, h=stage.clientHeight||360;
+  stage.width=w*dpr; stage.height=h*dpr;
+  sx.setTransform(dpr,0,0,dpr,0,0);
+  stage.SW=w; stage.SH=h;
+}
+function drawStage(){
+  const W=stage.SW,H=stage.SH;
+  sx.clearRect(0,0,W,H);
+  // grid
+  sx.strokeStyle='rgba(120,160,155,.10)';sx.lineWidth=1;
+  for(let gx=0;gx<W;gx+=28){sx.beginPath();sx.moveTo(gx,0);sx.lineTo(gx,H);sx.stroke();}
+  for(let gy=0;gy<H;gy+=28){sx.beginPath();sx.moveTo(0,gy);sx.lineTo(W,gy);sx.stroke();}
+
+  // ankle joint (rotation axis) sits mid-frame; shank goes up, foot points right
+  const ax=W*0.42, ay=H*0.52;
+  const shankLen=Math.min(H*0.34,130);
+  const footLen=Math.min(W*0.34,150);
+
+  // ============ TWO-BODY STATE ============
+  // Platform (thetaP) and foot (thetaF) are now independent angles. They are
+  // coupled only through the strap. Visually you can see the slip when they
+  // diverge.
+  const thP=S.thetaP, thF=S.thetaF;     // + dorsiflex (toe up), - plantarflex
+  const toeAngP = -thP;                  // platform angle on screen
+  const toeAngF = -thF;                  // foot     angle on screen
+
+  // ---- shank (fixed, vertical) ----
+  limb(ax, ay, ax, ay-shankLen, 24,'#2a3a3d','#38504f');
+  // calf cuff
+  sx.fillStyle='#20343a';sx.strokeStyle='#3f6068';sx.lineWidth=2;
+  sx.beginPath();sx.roundRect(ax-16, ay-shankLen-6, 32, 20, 5);sx.fill();sx.stroke();
+
+  // ============ ORTHOSIS PLATFORM (motor side, drawn UNDER the foot) ============
+  // strut along the platform direction (amber/brown)
+  const ptx = ax + footLen*Math.cos(toeAngP);
+  const pty = ay - footLen*Math.sin(toeAngP);
+  sx.globalAlpha=.95;
+  limb(ax,ay,ptx,pty,13,'#3a2f12','#6a5018');
+  sx.globalAlpha=1;
+  // foot plate (platform) + FSR pads -- rotate by PLATFORM angle
+  sx.save();
+  sx.translate(ax,ay); sx.rotate(toeAngP);
+  sx.fillStyle='#28383b';sx.strokeStyle='#4a6a68';sx.lineWidth=2;
+  sx.beginPath();sx.roundRect(-footLen*0.30, 6, footLen*1.15, 12, 4);sx.fill();sx.stroke();
+  // FSR pads under the sole -- lit by |strap load| (the genuine interaction force)
+  const nF = 3;
+  const lit = clamp(Math.abs(S.Fsr)/40,0,1);
+  for(let i=0;i<nF;i++){
+    const fx = -footLen*0.10 + i*(footLen*0.9/(nF-1));
+    sx.fillStyle=`rgba(255,109,134,${0.22+0.65*lit})`;
+    sx.beginPath();sx.roundRect(fx-6, 8, 12, 8, 2);sx.fill();
+  }
+  sx.restore();
+
+  // ============ FOOT (patient side, drawn ON TOP of the platform) ============
+  const ftx = ax + footLen*Math.cos(toeAngF);
+  const fty = ay - footLen*Math.sin(toeAngF);
+  const fhx = ax - footLen*0.28*Math.cos(toeAngF);
+  const fhy = ay + footLen*0.28*Math.sin(toeAngF);
+  limb(fhx,fhy,ftx,fty,20,'#324447','#3f5c5b');
+
+  // ============ STRAPS (visible coupling foot<->platform) ============
+  // Two straps tether the foot to the platform; their tension IS the FSR load.
+  drawStrap(ax, ay, footLen, toeAngP, toeAngF, 0.45);
+  drawStrap(ax, ay, footLen, toeAngP, toeAngF, 0.82);
+
+  // motor housing at the ankle axis
+  sx.fillStyle='#20343a';sx.strokeStyle='#3f6068';sx.lineWidth=2;
+  sx.beginPath();sx.roundRect(ax-15,ay-15,30,30,6);sx.fill();sx.stroke();
+  sx.fillStyle=getCSS('--amber');sx.font='700 9px '+getCSS('--mono');
+  sx.textAlign='center';sx.fillText('M',ax,ay+3);
+
+  // joints & labels
+  dot(ax,ay,7,getCSS('--teal'));
+  sx.fillStyle=getCSS('--muted');sx.font='10px '+getCSS('--mono');sx.textAlign='left';
+  sx.fillText('ankle axis',ax+12,ay+22);
+  sx.fillText('shank',ax+10,ay-shankLen+4);
+
+  // motor torque arc at the ankle (drives the PLATFORM)
+  if(S.assist && Math.abs(S.motorT)>0.15){
+    const sign=Math.sign(S.motorT);
+    sx.strokeStyle=getCSS('--amber');sx.globalAlpha=.7;sx.lineWidth=3;
+    sx.beginPath();
+    const a0=-Math.PI/2, a1=a0+sign*Math.min(1.2,Math.abs(S.motorT)/6);
+    sx.arc(ax,ay,30,Math.min(a0,a1),Math.max(a0,a1));sx.stroke();sx.globalAlpha=1;
+  }
+
+  // patient push arrow at the FOOT toe (rose) -- the patient's voluntary torque
+  if(Math.abs(S.patientT)>0.4){
+    const push = S.patientT;
+    const perpAng = toeAngF + Math.PI/2;
+    const mag = clamp(push*5.5, -46, 46);
+    const px = ftx + mag*Math.cos(perpAng);
+    const py = fty - mag*Math.sin(perpAng);
+    arrow(ftx,fty,px,py,getCSS('--rose'));
+    sx.fillStyle=getCSS('--rose');sx.font='10px '+getCSS('--mono');sx.textAlign='left';
+    sx.fillText('F patient', px+4, py);
+  }
+  // strap pull on the foot (amber) -- the genuine FSR force, opposite to push
+  if(Math.abs(S.Tstrap)>0.3){
+    const f = S.Tstrap; // signed: + pulls foot toward dorsiflex
+    const perpAng = toeAngF + Math.PI/2;
+    const mag = clamp(f*4.0, -52, 52);
+    const ox = ftx + mag*Math.cos(perpAng);
+    const oy = fty - mag*Math.sin(perpAng);
+    arrow(ftx,fty,ox,oy, getCSS('--amber'));
+    sx.fillStyle=getCSS('--amber');sx.font='10px '+getCSS('--mono');sx.textAlign='left';
+    sx.fillText('F strap (FSR)', ox+4, oy);
+  }
+
+  // ============ ANGLE ARCS: PLATFORM (amber, dashed) + FOOT (teal, solid) ============
+  sx.strokeStyle=getCSS('--amber');sx.globalAlpha=.55;sx.lineWidth=1.4;
+  sx.setLineDash([4,4]);
+  sx.beginPath();
+  { const a0=0, a1=toeAngP;
+    sx.arc(ax,ay,52,Math.min(a0,a1),Math.max(a0,a1)); }
+  sx.stroke();sx.setLineDash([]);sx.globalAlpha=1;
+  sx.strokeStyle='rgba(53,224,198,.65)';sx.lineWidth=1.8;
+  sx.beginPath();
+  { const a0=0, a1=toeAngF;
+    sx.arc(ax,ay,44,Math.min(a0,a1),Math.max(a0,a1)); }
+  sx.stroke();
+  // angle labels at each arc's bisector
+  const amidP=toeAngP/2, amidF=toeAngF/2;
+  sx.fillStyle=getCSS('--amber');sx.font='10px '+getCSS('--mono');sx.textAlign='center';
+  sx.fillText('plat '+(deg(thP)>=0?'+':'')+deg(thP).toFixed(0)+'\u00B0',
+              ax+66*Math.cos(amidP), ay-66*Math.sin(amidP));
+  sx.fillStyle=getCSS('--teal');
+  sx.fillText((deg(thF)>=0?'+':'')+deg(thF).toFixed(0)+'\u00B0 '+(deg(thF)>=0?'dorsi':'plantar'),
+              ax+58*Math.cos(amidF), ay-58*Math.sin(amidF));
+
+  // ============ SLIP INDICATOR (corner chip) ============
+  // With a genuinely stiff strap the slip is sub-degree, so we display to
+  // hundredths of a degree to make the coupling visible.
+  const slipDeg = deg(S.thetaP - S.thetaF);
+  const slipAbs = Math.abs(slipDeg);
+  const slipStr = slipAbs < 5
+    ? (slipDeg>=0?'+':'')+slipDeg.toFixed(2)+'\u00B0'
+    : (slipDeg>=0?'+':'')+slipDeg.toFixed(1)+'\u00B0';
+  sx.fillStyle='rgba(9,15,17,.78)';sx.strokeStyle='rgba(120,160,155,.25)';sx.lineWidth=1;
+  sx.beginPath();sx.roundRect(W-152, H-62, 140, 46, 6);sx.fill();sx.stroke();
+  sx.fillStyle=getCSS('--faint');sx.font='10px '+getCSS('--mono');sx.textAlign='left';
+  sx.fillText('STRAP SLIP', W-144, H-46);
+  // color: green when tight, rose when slipping (kc too soft)
+  sx.fillStyle = slipAbs < 1 ? getCSS('--lime')
+              : slipAbs < 5 ? getCSS('--amber')
+              : getCSS('--rose');
+  sx.font='600 15px '+getCSS('--mono');
+  sx.fillText(slipStr, W-144, H-26);
+  sx.fillStyle=getCSS('--faint');sx.font='9px '+getCSS('--mono');
+  sx.fillText('kc(\u03B8P\u2212\u03B8F)', W-74, H-26);
+
+  // banners
+  if(!S.assist){
+    sx.fillStyle='rgba(255,82,87,.12)';sx.fillRect(0,0,W,22);
+    sx.fillStyle=getCSS('--red');sx.font='600 11px '+getCSS('--mono');sx.textAlign='center';
+    sx.fillText('motor OFF \u2014 platform backdrivable, foot only restrained by strap', W/2, 15);
+  } else if(MODE==='passive'){
+    sx.fillStyle='rgba(155,140,255,.12)';sx.fillRect(0,0,W,22);
+    sx.fillStyle=getCSS('--violet');sx.font='600 11px '+getCSS('--mono');sx.textAlign='center';
+    sx.fillText('passive mode \u2014 '+S.phaseName+'  \u00B7  patient relaxed', W/2, 15);
+  }
+}
+
+// strap visualization: a band tethering the foot to the platform at a given
+// fraction of the foot length. Color intensity reflects the strap load.
+function drawStrap(ax, ay, footLen, toeAngP, toeAngF, frac){
+  // anchor on platform (bottom) and foot (top) at the same fractional station
+  const sx_p = ax + footLen*frac*Math.cos(toeAngP);
+  const sy_p = ay - footLen*frac*Math.sin(toeAngP);
+  const sx_f = ax + footLen*frac*Math.cos(toeAngF);
+  const sy_f = ay - footLen*frac*Math.sin(toeAngF);
+  // perpendicular offsets to make the strap look like a band over the foot
+  // ("up" in screen, away from the platform sole)
+  const perpP_x = -Math.sin(toeAngP), perpP_y = -Math.cos(toeAngP);
+  const perpF_x = -Math.sin(toeAngF), perpF_y = -Math.cos(toeAngF);
+  const off = 14;
+  const p1x = sx_p + perpP_x*off, p1y = sy_p + perpP_y*off;
+  const p2x = sx_p - perpP_x*off, p2y = sy_p - perpP_y*off;
+  const f1x = sx_f + perpF_x*off, f1y = sy_f + perpF_y*off;
+  const f2x = sx_f - perpF_x*off, f2y = sy_f - perpF_y*off;
+
+  // strap tension color (rose) -- brighter when |Tstrap| is high
+  const lit = clamp(Math.abs(S.Fsr)/40, 0, 1);
+  sx.fillStyle = `rgba(255,109,134,${0.30+0.55*lit})`;
+  sx.strokeStyle = `rgba(255,109,134,${0.55+0.4*lit})`;
+  sx.lineWidth = 1.4;
+  sx.beginPath();
+  sx.moveTo(p1x,p1y);
+  sx.lineTo(f1x,f1y);
+  sx.lineTo(f2x,f2y);
+  sx.lineTo(p2x,p2y);
+  sx.closePath();
+  sx.fill();sx.stroke();
+}
+function limb(x0,y0,x1,y1,w,fill,stroke){
+  sx.lineCap='round';sx.strokeStyle=stroke;sx.lineWidth=w+3;
+  sx.beginPath();sx.moveTo(x0,y0);sx.lineTo(x1,y1);sx.stroke();
+  sx.strokeStyle=fill;sx.lineWidth=w;
+  sx.beginPath();sx.moveTo(x0,y0);sx.lineTo(x1,y1);sx.stroke();
+}
+function dot(x,y,r,c){sx.fillStyle=c;sx.beginPath();sx.arc(x,y,r,0,7);sx.fill();}
+function arrow(x0,y0,x1,y1,c){
+  sx.strokeStyle=c;sx.fillStyle=c;sx.lineWidth=3;sx.lineCap='round';
+  sx.beginPath();sx.moveTo(x0,y0);sx.lineTo(x1,y1);sx.stroke();
+  const a=Math.atan2(y1-y0,x1-x0);
+  sx.beginPath();sx.moveTo(x1,y1);
+  sx.lineTo(x1-9*Math.cos(a-.4),y1-9*Math.sin(a-.4));
+  sx.lineTo(x1-9*Math.cos(a+.4),y1-9*Math.sin(a+.4));
+  sx.closePath();sx.fill();
+}
+
+/* =======================  TASKS / MODES  ======================= */
+let MODE='passive';
+const TASKS=[
+  {id:'passive',   k:'EXERCISE I',  t:'Passive (repetitive)'},
+  {id:'isometric', k:'EXERCISE II', t:'Isometric (resist)'},
+  {id:'isotonic',  k:'EXERCISE III',t:'Isotonic (assist)'},
+  {id:'gait',      k:'REFERENCE',   t:'Gait cycle profile'},
+];
+
+const PARAMS={
+  passive:[
+    {key:'rcGain', label:'learning gain  L', min:0.1,max:1.6,step:0.05,unit:'',get:()=>C.rcGain,set:v=>C.rcGain=v},
+    {key:'rcQ',    label:'robustness filter  Q', min:0.80,max:1.0,step:0.01,unit:'',get:()=>C.rcQ,set:v=>C.rcQ=v},
+    {key:'ctrlDelay',label:'control period', min:0.005,max:0.05,step:0.005,unit:'s',get:()=>C.ctrlDelay,set:v=>C.ctrlDelay=v},
+    {key:'kc',     label:'strap stiffness  kc', min:100,max:1500,step:10,unit:'Nm/rad',get:()=>P.kc,set:v=>P.kc=v},
+  ],
+  isometric:[
+    {key:'admM',   label:'virtual mass  M', min:0.4,max:2.0,step:0.05,unit:'',get:()=>C.admM,set:v=>C.admM=v},
+    {key:'admB',   label:'virtual damping  B', min:0.2,max:2.0,step:0.05,unit:'',get:()=>C.admB,set:v=>C.admB=v},
+    {key:'admK',   label:'virtual stiffness  K', min:0.2,max:3.0,step:0.05,unit:'',get:()=>C.admK,set:v=>C.admK=v},
+    {key:'forceDesired',label:'desired force', min:-40,max:40,step:1,unit:'N',get:()=>C.forceDesired,set:v=>C.forceDesired=v},
+    {key:'kc',     label:'strap stiffness  kc', min:100,max:1500,step:10,unit:'Nm/rad',get:()=>P.kc,set:v=>P.kc=v},
+  ],
+  isotonic:[
+    {key:'admM',   label:'virtual mass  M', min:0.1,max:1.2,step:0.05,unit:'',get:()=>C.admM,set:v=>C.admM=v},
+    {key:'admB',   label:'virtual damping  B', min:0.2,max:2.0,step:0.05,unit:'',get:()=>C.admB,set:v=>C.admB=v},
+    {key:'admK',   label:'virtual stiffness  K', min:0.1,max:2.0,step:0.05,unit:'',get:()=>C.admK,set:v=>C.admK=v},
+    {key:'forceDesired',label:'desired force', min:-40,max:40,step:1,unit:'N',get:()=>C.forceDesired,set:v=>C.forceDesired=v},
+    {key:'kc',     label:'strap stiffness  kc', min:100,max:1500,step:10,unit:'Nm/rad',get:()=>P.kc,set:v=>P.kc=v},
+  ],
+  gait:[
+    {key:'ctrlDelay',label:'sample period', min:0.005,max:0.05,step:0.005,unit:'s',get:()=>C.ctrlDelay,set:v=>C.ctrlDelay=v},
+    {key:'kc',     label:'strap stiffness  kc', min:100,max:1500,step:10,unit:'Nm/rad',get:()=>P.kc,set:v=>P.kc=v},
+  ],
+};
+
+// per-mode default virtual model (thesis: resist M=1,B=0.8,K=1 ; assist M=0.2,B=0.8,K=1)
+const MODE_DEFAULTS={
+  isometric:{admM:1.0, admB:0.8, admK:1.0},
+  isotonic:{admM:0.2, admB:0.8, admK:1.0},
+};
+
+const PROSE={
+  passive:`<h3>Exercise I &middot; Passive mode (repetitive control)</h3>
+    <p><b>Two-body model.</b> The orthosis is built as two coupled rigid bodies, mirroring the arm/cuff pairing of the elbow rig. The motor drives only the <b>orthosis platform</b> (&theta;<sub>P</sub>, amber dashed arc); the <b>foot</b> (&theta;<sub>F</sub>, teal solid arc) is tied to it through a stiff strap with torque <code>T_strap = kc&middot;(&theta;<sub>P</sub> &minus; &theta;<sub>F</sub>)</code>. The FSR under the sole reads that strap load &mdash; the genuine interaction force between device and patient &mdash; not the patient's own torque. When the motor holds the platform, the strap is the only thing driving the foot, so any patient push is constrained.</p>
+    <p>In passive rehabilitation the athlete exerts no effort: the orthosis drives the platform through a stored <b>gait-cycle reference</b> (amber) and the strap drags the foot along. The encoder feeds back the platform angle; the foot follows through the strap. This is the mode a clinician starts with, restoring range of motion after a lateral-ligament sprain.</p>
+    <p>The controller is <b>repetitive control</b> &mdash; applied here for the first time in an AAFO. It exploits that a gait cycle repeats: the tracking error from one period is used to correct the feed-forward command of the next, so tracking sharpens cycle after cycle:</p>
+    <div class="eq">u(i+N) = Q&#8226;( u(i) + L&#8226;e(i) )&nbsp;&nbsp;&nbsp;e(i) = r(i) &minus; &theta;<sub>P</sub>(i)</div>
+    <p>Watch the <b>error trace</b> (lime): it is large on the first cycle, then collapses toward zero as the learned correction fills in. The thesis reports a full-cycle mean error of about 1.9&deg; on hardware with an error-norm near 0.095.</p>
+    <div class="q"><b>&#9670;</b> Drop the <b>strap stiffness kc</b> and watch the <b>STRAP SLIP</b> chip in the bench view grow &mdash; the foot now lags the platform visibly. Raise kc back up and the two bodies lock together (a tight cuff), shrinking the slip and the FSR reading.</div>
+    <div class="q"><b>&#9670;</b> Raise the <b>learning gain L</b>: convergence is faster but too high a value makes the loop ring. Lower the <b>robustness filter Q</b> below 1 and the steady error grows slightly &mdash; the classic Q&ndash;L trade-off that keeps repetitive control stable against un-modelled dynamics.</div>
+    <div class="q"><b>&#9670;</b> <b>Attentional focus.</b> Even in passive mode the EMG trace shows residual ankle-muscle activity. Switch between <em>external</em>, <em>control</em> and <em>internal</em> focus and watch the EMG-activity meter change while the foot angle stays the same &mdash; the constrained-action effect where attending to the muscle (internal) raises the signal and attending to the platform (external) lowers it.</div>`,
+  isometric:`<h3>Exercise II &middot; Isometric mode (admittance resist)</h3>
+    <p>Now the athlete pushes and the device <em>resists</em>. Admittance control reads the strap load from the FSR (the force the device is actually applying to the foot) and turns it into a platform-position command through a virtual mass&ndash;spring&ndash;damper (Newton's second law, thesis Eq.&nbsp;4.27):</p>
+    <div class="eq">F(t) &minus; K&#8226;x(t) &minus; B&#8226;x&#775;(t) = M&#8226;x&#776;(t)</div>
+    <p>With a <b>heavy virtual mass</b> (M&nbsp;=&nbsp;1) the platform barely yields. The strap therefore stretches as the foot tries to move, and the FSR reports that growing load &mdash; the muscle contracts against an almost fixed joint, an isometric hold. Push the foot (hold the button or raise effort) and watch the rose FSR trace build while the foot angle moves only a little.</p>
+    <ul>
+      <li><b>M</b> (virtual mass) sets how sluggishly the <em>platform</em> yields &mdash; large M &rarr; stiffer, more resistive.</li>
+      <li><b>B</b> damps the response so it settles without buzzing.</li>
+      <li><b>K</b> pulls the command back toward neutral, giving a spring-like return.</li>
+      <li><b>kc</b> (strap stiffness) sets how much the foot lags the platform &mdash; small kc &rarr; soft strap, foot slides over the platform.</li>
+    </ul>
+    <div class="q"><b>&#9670;</b> The thesis limits travel to +29&deg; dorsiflexion / &minus;30&deg; plantarflexion for safety. Push hard and the command saturates at those ROM guides on the scope. On hardware this resist mode was the most accurate, with an error-norm average near 0.05.</div>
+    <div class="q"><b>&#9670;</b> <b>Attentional focus.</b> Switch between <em>external</em>, <em>control</em> and <em>internal</em> focus while pushing at a fixed effort. Attending to the ankle muscles (internal) raises the EMG signal; attending to the platform (external) lowers it &mdash; the constrained-action effect. The physical torque and FSR load are identical; only the electrical signal the orthosis reads changes. For a myoelectric device, internal focus gives a stronger, higher-SNR command that clears the threshold reliably.</div>`,
+  isotonic:`<h3>Exercise III &middot; Isotonic mode (admittance assist)</h3>
+    <p>Same admittance law, but with a <b>light virtual mass</b> (M&nbsp;=&nbsp;0.2). Now the platform moves freely with the strap load, so the muscle works through a range of motion against a near-constant load &mdash; an isotonic contraction. This is the <em>assist</em> mode: the device helps carry the limb through the movement.</p>
+    <div class="eq">x&#776; = ( F &minus; K&#8226;x &minus; B&#8226;x&#775; ) / M&nbsp;&nbsp;&nbsp;(small M &rarr; large motion)</div>
+    <p>Compare the feel with Exercise II at a fixed effort: here a gentle push sweeps the platform (and the foot, dragged through the strap) across a wide arc, whereas the resist mode held it nearly still for the same force. The thesis notes the assist mode is more variable than resist (higher SD), which you can see as a livelier angle trace.</p>
+    <div class="q"><b>&#9670;</b> Set a non-zero <b>desired force</b> to bias the sweep toward dorsiflexion or plantarflexion &mdash; the controller then assists the athlete toward that operating point rather than neutral.</div>
+    <div class="q"><b>&#9670;</b> Turn the <b>motor OFF</b> in any mode: the platform becomes backdrivable, so the strap drags it along with the foot instead of resisting. The foot now swings freely under gravity and patient torque &mdash; that contrast is exactly what the closed-loop control is buying you.</div>
+    <div class="q"><b>&#9670;</b> <b>Attentional focus as an input.</b> The focus condition still scales the EMG, so internal focus commands a larger assistive force for the same movement. Because the focus type can itself be decoded from the EMG (classifiers reach ~88% with hand-crafted features and ~99% with wavelet features), it can act as a second, deliberate input channel, effectively doubling the commands available to the interface.</div>`,
+  gait:`<h3>Reference &middot; The ankle gait-cycle profile</h3>
+    <p>Every exercise ultimately serves normal gait, so the passive reference is one full <b>ankle gait cycle</b> (~2&nbsp;s for a comfortable walk). The cycle splits into <b>stance</b> (0&ndash;60%) and <b>swing</b> (60&ndash;100%), then eight sub-phases.</p>
+    <p>Follow the amber reference and the phase label on the bench: a small plantarflexion at heel strike, controlled dorsiflexion as the body rolls over the foot, a strong plantarflexion push-off near 62%, then recovery to neutral in swing for foot clearance. Healthy ankle range in this plane runs roughly +20&ndash;30&deg; dorsiflexion and &minus;38&ndash;46&deg; plantarflexion.</p>
+    <div class="q"><b>&#9670;</b> This profile is the setpoint the repetitive controller learns to track in Exercise I. Reading it phase by phase explains <em>why</em> the reference dips and rises where it does &mdash; each feature maps to a mechanical event in the step.</div>
+    <div class="q"><b>&#9670;</b> Slow the <b>cycle period</b> right down and step through the phases: a slower cadence is what a patient early in rehabilitation would actually be trained at before returning to sport pace.</div>`,
+};
+
+/* syntax-highlighted Arduino listings (Uno + 24V DC servo + encoder + FSR) */
+const CODE={
+  passive:{tag:'passive.ino',html:hl(
+`// Passive mode: repetitive control tracks the stored gait cycle.
+// Arduino Uno, DC servo (PWM pin 9), rotary encoder, no patient effort.
+#include <Servo.h>
+Servo motor;
+const int N = 100;          // samples per gait cycle
+float ref[N];               // gait-cycle reference (deg)
+float u[N] = {0};           // learned feed-forward command
+float L = 0.9, Q = 0.97;    // learning gain, robustness filter
+int i = 0;
+
+float readAngle();          // from rotary encoder
+
+void loop() {
+  float e = (ref[i] + u[i]) - readAngle();   // tracking error
+  u[i] = Q * (u[i] + L * e);                  // repetitive update
+  motor.write(map(ref[i] + u[i], -45, 30, 0, 180));
+  i = (i + 1) % N;
+  delay(20);
+}`)},
+  isometric:{tag:'admittance_resist.ino',html:hl(
+`// Isometric / resist: heavy virtual mass, ankle barely yields.
+#include <Servo.h>
+Servo motor;
+const int fsrPin = A0;
+const int forceOffset = 512;
+float posDesired = 0;       // commanded angle (deg)
+float vel = 0;
+float M = 1.0, B = 0.8, K = 1.0;   // virtual m-s-d (resist)
+float forceDesired = 0;
+
+void loop() {
+  int F = analogRead(fsrPin) - forceOffset;   // interaction force
+  float xdd = ((F - forceDesired) - K*posDesired*0.15 - B*vel) / M;
+  vel += xdd * 0.02;
+  posDesired += vel * 0.02 * 12;
+  posDesired = constrain(posDesired, -30, 29);   // ROM limits
+  motor.write(map(posDesired, -45, 30, 0, 180));
+  delay(20);
+}`)},
+  isotonic:{tag:'admittance_assist.ino',html:hl(
+`// Isotonic / assist: light virtual mass, ankle sweeps with the patient.
+#include <Servo.h>
+Servo motor;
+const int fsrPin = A0;
+const int forceOffset = 512;
+float posDesired = 0, vel = 0;
+float M = 0.2, B = 0.8, K = 1.0;   // virtual m-s-d (assist)
+float forceDesired = 0;
+
+void loop() {
+  int F = analogRead(fsrPin) - forceOffset;
+  float xdd = ((F - forceDesired) - K*posDesired*0.15 - B*vel) / M;
+  vel += xdd * 0.02;
+  posDesired += vel * 0.02 * 12;   // small M -> large motion
+  posDesired = constrain(posDesired, -30, 29);
+  motor.write(map(posDesired, -45, 30, 0, 180));
+  delay(20);
+}`)},
+  gait:{tag:'gait_reference.ino',html:hl(
+`// Build one ankle gait cycle as the reference table (deg vs % cycle).
+// Landmarks: heel strike, loading, mid-stance, push-off, swing.
+const int N = 100;
+float ref[N];
+
+void buildGait() {
+  // (percent, angle) knots of a healthy ankle sagittal profile
+  float px[] = {0, 6, 18, 45, 60, 62, 68, 80, 92, 100};
+  float py[] = {0,-4,  2, 12, -6,-16, -8,  3,  1,   0};
+  int k = 0;
+  for (int i = 0; i < N; i++) {
+    float p = 100.0 * i / N;
+    while (k < 8 && p > px[k+1]) k++;
+    float u = (p - px[k]) / (px[k+1] - px[k]);
+    float s = u*u*(3 - 2*u);            // smoothstep
+    ref[i] = py[k] + (py[k+1] - py[k]) * s;
+  }
+}`)},
+};
+
+function hl(src){
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return esc(src)
+    .replace(/(\/\/[^\n]*)/g,'<span class="cm">$1</span>')
+    .replace(/\b(void|int|float|const|if|for|while|return)\b/g,'<span class="kw">$1</span>')
+    .replace(/\b(setup|loop|motor|Serial|analogRead|map|constrain|attach|write|begin|delay|readAngle|buildGait)\b/g,'<span class="fn">$1</span>')
+    .replace(/(#include|&lt;Servo.h&gt;)/g,'<span class="st">$1</span>');
+}
+
+/* =======================  UI WIRING  ======================= */
+const $=id=>document.getElementById(id);
+const scope=new Scope($('scope'));
+
+// gait period lives on state so RC memory can size to it
+S.gaitPeriod = 2.0;
+
+function buildTasks(){
+  const rail=$('taskRail');rail.innerHTML='';
+  TASKS.forEach(tk=>{
+    const b=document.createElement('button');
+    b.className='task'+(tk.id===MODE?' active':'');
+    b.innerHTML=`<span class="k">${tk.k}</span><span class="t">${tk.t}</span>`;
+    b.onclick=()=>selectMode(tk.id);
+    rail.appendChild(b);
+  });
+}
+function selectMode(id){
+  MODE=id;
+  // apply per-mode virtual-model defaults
+  if(MODE_DEFAULTS[id]) Object.assign(C, MODE_DEFAULTS[id]);
+  S.posDes=0; admVel=0; S.gaitT=0; rcMem=null; ctrlAcc=0;
+  buildTasks();
+  buildParams();
+  $('prose').innerHTML=PROSE[id];
+  $('code').innerHTML=CODE[id].html;
+  $('codeTag').textContent=CODE[id].tag;
+  $('modeTag').textContent=TASKS.find(t=>t.id===id).t.toLowerCase();
+}
+function buildParams(){
+  const box=$('paramBox');box.innerHTML='';
+  PARAMS[MODE].forEach(p=>{
+    const wrap=document.createElement('div');wrap.className='field';
+    const val=p.get();
+    const show = p.step<1 ? val.toFixed(2) : val.toFixed(0);
+    wrap.innerHTML=`<div class="lbl"><b>${p.label}</b><span class="num">${show}${p.unit}</span></div>`;
+    const inp=document.createElement('input');
+    inp.type='range';inp.min=p.min;inp.max=p.max;inp.step=p.step;inp.value=val;
+    inp.oninput=e=>{
+      const v=parseFloat(e.target.value);p.set(v);
+      wrap.querySelector('.num').textContent=(p.step<1?v.toFixed(2):v.toFixed(0))+p.unit;
+    };
+    wrap.appendChild(inp);
+    box.appendChild(wrap);
+  });
+}
+
+// run / reset
+function setRun(on){
+  S.running=on;
+  $('runBtn').textContent=on?'Pause':'Run';
+  $('runBtn').classList.toggle('primary',!on);
+  $('statTxt').textContent=on?'running':'paused';
+  $('statDot').classList.toggle('run',on);
+}
+$('runBtn').onclick=()=>setRun(!S.running);
+$('resetBtn').onclick=()=>{
+  S.thetaP=0;S.omegaP=0;S.thetaF=0;S.omegaF=0;S.Tstrap=0;
+  S.ref=0;S.posDes=0;admVel=0;S.gaitT=0;
+  S.patientT=0;S.err=0;S.errRms=0;S.t=0;rcMem=null;scope.buf=[];
+  S.emgRaw=0;S.emgRms=0;
+};
+
+// patient inputs
+$('effort').oninput=e=>{S.effort=e.target.value/100;$('effortNum').textContent=e.target.value+'%';};
+$('dir').oninput=e=>{S.dir=parseInt(e.target.value);
+  $('dirNum').textContent=S.dir>0?'dorsiflex':'plantarflex';};
+$('assist').onchange=e=>{S.assist=e.target.checked;$('assistTog').classList.toggle('on',e.target.checked);};
+$('assistTog').classList.add('on');
+$('period').oninput=e=>{S.gaitPeriod=parseFloat(e.target.value);
+  $('periodNum').textContent=S.gaitPeriod.toFixed(1)+' s';rcMem=null;};
+
+const push=$('pushBtn');
+const pushOn=v=>{S.pushing=v;push.classList.toggle('on',v);};
+push.addEventListener('pointerdown',e=>{e.preventDefault();pushOn(true);});
+push.addEventListener('pointerup',()=>pushOn(false));
+push.addEventListener('pointerleave',()=>pushOn(false));
+push.addEventListener('pointercancel',()=>pushOn(false));
+window.addEventListener('keydown',e=>{if(e.code==='Space'&&!e.repeat){e.preventDefault();pushOn(true);}});
+window.addEventListener('keyup',e=>{if(e.code==='Space'){pushOn(false);}});
+
+// attentional focus segmented control
+document.querySelectorAll('#focusSeg .segbtn').forEach(b=>{
+  b.onclick=()=>{
+    S.focus=b.dataset.focus;
+    document.querySelectorAll('#focusSeg .segbtn').forEach(x=>x.classList.toggle('active',x===b));
+    $('focusHint').textContent=FOCUS[S.focus].hint+' \u00B7 '+
+      (S.focus==='internal'?'higher EMG, stronger control signal':
+       S.focus==='external'?'lower EMG, more efficient but weaker signal':'baseline EMG');
+  };
+});
+
+// telemetry
+function telem(){
+  $('tTheta').innerHTML=(deg(S.thetaF)>=0?'+':'')+deg(S.thetaF).toFixed(0)+'<small>&deg;</small>';
+  $('tCmd').innerHTML=(S.ref>=0?'+':'')+S.ref.toFixed(0)+'<small>&deg;</small>';
+  $('tForce').innerHTML=S.Fsr.toFixed(0)+'<small> N</small>';
+  $('tErr').innerHTML=S.err.toFixed(1)+'<small>&deg;</small>';
+  $('tTm').innerHTML=S.motorT.toFixed(1)+'<small> Nm</small>';
+  $('tEmg').innerHTML=S.emgRms.toFixed(0)+'<small> cnt</small>';
+  $('tPhase').textContent=S.assist?S.phaseName:'free';
+  // EMG activity meter (RMS above baseline). Ticks ~ external/internal typical bands.
+  const rms=S.emgRms;
+  $('rmsVal').innerHTML=rms.toFixed(0)+' <small>cnt</small>';
+  $('rmsFill').style.width=clamp(rms/700*100,0,100).toFixed(0)+'%';
+  const q = rms<80 ? 'weak \u2013 may fall below threshold'
+          : rms<300 ? 'moderate signal'
+          : 'strong \u2013 reliable EMG control';
+  $('rmsQual').textContent=q;
+}
+
+/* =======================  MAIN LOOP  ======================= */
+let last=performance.now();
+function frame(now){
+  let rdt=(now-last)/1000; last=now;
+  rdt=Math.min(rdt,0.05);
+  if(S.running){
+    step(rdt);
+    scope.push({t:S.t, theta:deg(S.thetaF), plat:deg(S.thetaP), ref:S.ref, force:S.Fsr, emg:S.emgRaw, err:S.err});
+  }
+  drawStage();
+  scope.draw(S.t);
+  telem();
+  requestAnimationFrame(frame);
+}
+function resizeAll(){resizeStage();scope.resize();}
+window.addEventListener('resize',resizeAll);
+
+// init
+buildTasks();buildParams();
+$('prose').innerHTML=PROSE.passive;
+$('code').innerHTML=CODE.passive.html;
+$('codeTag').textContent=CODE.passive.tag;
+resizeAll();
+setRun(true);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
